@@ -27,6 +27,13 @@ class ModbusPlatform {
     this.modbus = new Modbus.client.TCP(this.socket, config.unit || 1);
     this.commands = [];
 
+    // modbus mode
+    if (!('modbus_mode' in config)) {
+      this.modbus_mode = 0;
+    } else {
+      this.modbus_mode = config.modbus_mode;
+    }
+
     homebridge.on("didFinishLaunching", () => {
       this.socket.connect(this.ip);
       Log("Connecting to", this.ip.host);
@@ -100,12 +107,22 @@ class ModbusPlatform {
       Log("warning: polling faster than modbus can reply");
       return;
     }
-
-    for (let type in this.maxModbus) {
-      let idx = this.minModbus[type];
-      let count = 1+this.maxModbus[type]-idx;
-      this.commands.push({"cmd":'r', "type":type, "add":idx, "count":count});
+    if (this.modbus_mode == 0){
+      for (let type in this.maxModbus) {
+        let idx = this.minModbus[type];
+        let count = this.maxModbus[type]-idx+1;
+        this.commands.push({"cmd":'r', "type":type, "add":idx, "count":count});
+      }
+    }else{
+      for(var i=0; i<this.charList.length; i++){
+        let obj = this.charList[i];
+        let type = obj.type;
+        let idx = obj.add;
+        let count = obj.map.len;
+        this.commands.push({"cmd":'r', "type":type, "add":idx, "count":count});
+      }
     }
+    
     this.commands.push({"cmd":'x'});
 
     this.socket.emit('modbus');
@@ -133,8 +150,14 @@ class ModbusPlatform {
     }
 
     else if (this.command.cmd == 'r') {
-      this.modbus[{'c':'readCoils', 'r':'readHoldingRegisters', 'i':'readInputRegisters'}[this.command.type]](this.command.add-1, this.command.count).then((resp) => {
-        this.status[this.command.type] = resp.response._body.valuesAsArray;
+      this.modbus[{'c':'readCoils', 'r':'readHoldingRegisters', 'i':'readInputRegisters'}[this.command.type]](this.command.add, this.command.count).then((resp) => {
+        if(this.modbus_mode==0){
+          this.status[this.command.type] = resp.response._body.valuesAsArray;
+        }else{
+          let k = this.command.type.toString()+"_"+this.command.add.toString();
+          this.status[k] = resp.response._body.valuesAsArray;
+        }
+       
         this.command = null;
         if (this.commands.length)
           this.socket.emit('modbus');
@@ -146,8 +169,17 @@ class ModbusPlatform {
 
     else if (this.command.cmd == 'x') {
       this.charList.forEach((obj) => {
-        let idx = this.minModbus[obj.type];
-        let val = this.status[obj.type][obj.add - idx];
+        let val = [];
+        if(this.modbus_mode==0){
+          let idx = this.minModbus[obj.type];
+          for (let i = 0; i < obj.map.len; i++) {
+            val.push(this.status[obj.type][obj.add - idx+i]);
+          }
+        }else{
+          let k = obj.type.toString()+"_"+obj.add.toString();
+          val = this.status[k];
+        }
+
         obj.accessory.update(obj.characteristic, val, obj.map);
       });
       this.firstInit = false;
