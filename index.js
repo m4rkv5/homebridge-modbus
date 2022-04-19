@@ -323,6 +323,9 @@ class ModbusAccessory {
             if ('mask' in modbusMap) {
               val = val & modbusMap.mask;
             }
+            if ('scale' in modbusMap) {
+              val = val * modbusMap.scale;
+            }
             this.platform.writeModbus(modbusType, modbusAdd, val);
             callback();
           });
@@ -369,6 +372,10 @@ class ModbusAccessory {
      
     }else{
       // 其它类型
+    }
+
+    if ('scale' in map) {
+      val = val / map.scale;
     }
 
     if ('mask' in map) {
