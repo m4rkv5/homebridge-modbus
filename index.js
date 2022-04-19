@@ -27,12 +27,13 @@ class ModbusPlatform {
     this.modbus = new Modbus.client.TCP(this.socket, config.unit || 1);
     this.commands = [];
 
-    // modbus mode
+    // modbus 模式 0:批量采集模式 1：单个采集模式 
     if (!('modbus_mode' in config)) {
       this.modbus_mode = 0;
     } else {
       this.modbus_mode = config.modbus_mode;
     }
+    
 
     homebridge.on("didFinishLaunching", () => {
       this.socket.connect(this.ip);
@@ -70,13 +71,10 @@ class ModbusPlatform {
   }
 
   accessories(callback) {
-    if (!this.config)
-      return;
-    if (!this.config["accessories"])
-    {
-      Log("Error: no accessories defined");
+    if (!this.config){
       return;
     }
+
     this.status = [];
     this.charList = [];
     this.minModbus = [];
@@ -107,6 +105,8 @@ class ModbusPlatform {
       Log("warning: polling faster than modbus can reply");
       return;
     }
+
+
     if (this.modbus_mode == 0){
       for (let type in this.maxModbus) {
         let idx = this.minModbus[type];
@@ -122,7 +122,7 @@ class ModbusPlatform {
         this.commands.push({"cmd":'r', "type":type, "add":idx, "count":count});
       }
     }
-    
+
     this.commands.push({"cmd":'x'});
 
     this.socket.emit('modbus');
@@ -143,7 +143,7 @@ class ModbusPlatform {
     this.commandTime = Date.now();
 
     if (this.command.cmd == 'w') {
-      this.modbus[{'c':'writeSingleCoil', 'r':'writeSingleRegister'}[this.command.type]](this.command.add-1, Math.round(this.command.val));
+      this.modbus[{'c':'WriteSingleCoil', 'r':'writeSingleRegister'}[this.command.type]](this.command.add-1, Math.round(this.command.val));
       this.command = null;
       if (this.commands.length)
         this.socket.emit('modbus');
@@ -273,6 +273,10 @@ class ModbusAccessory {
           }
           modbusMap = cfg;
         }
+        //  寄存器长度
+        if (!('len' in modbusMap)) {
+          modbusMap.len = 1;
+        }
 
         if ('validValues' in modbusMap) {
           characteristic.props.validValues = modbusMap.validValues;
@@ -293,10 +297,11 @@ class ModbusAccessory {
         if (!this.platform.minModbus[modbusType] || this.platform.minModbus[modbusType] > modbusAdd) {
           this.platform.minModbus[modbusType] = modbusAdd;
         }
-        if (!this.platform.maxModbus[modbusType] || this.platform.maxModbus[modbusType] < modbusAdd) {
-          this.platform.maxModbus[modbusType] = modbusAdd;
+        if (!this.platform.maxModbus[modbusType] || this.platform.maxModbus[modbusType] < modbusAdd+modbusMap.len) {
+          this.platform.maxModbus[modbusType] = modbusAdd+modbusMap.len;
         }
 
+        
         if (modbusType == 'i') {
           modbusMap.readonly = true;
         }
@@ -318,14 +323,10 @@ class ModbusAccessory {
             if ('mask' in modbusMap) {
               val = val & modbusMap.mask;
             }
-            if ('scale' in modbusMap) {
-              val = val * modbusMap.scale;
-            }
             this.platform.writeModbus(modbusType, modbusAdd, val);
             callback();
           });
         }
-
         this.platform.charList.push({'accessory': this, 'characteristic': characteristic, 'type': modbusType, 'add': modbusAdd, 'map': modbusMap});
       }
     });
@@ -342,18 +343,43 @@ class ModbusAccessory {
     if (Date.now() < this.lastUpdate + 1000 && !this.platform.firstInit) {
       return;
     }
-    if ('scale' in map) {
-      val = val / map.scale;
+
+
+    if (characteristic.props.format == 'bool') {
+      val = val ? true : false;
+    }else if(characteristic.props.format == 'float'){
+      if(val.length == 2){
+        let v1 = val[0]&0xFF;
+        let v2 = (val[0]>>8)&0xFF;
+        let v3 = val[1]&0xFF;
+        let v4 = (val[1]>>8)&0xFF;
+        let buffer = Buffer.from([v1,v2,v3,v4]);
+        val = buffer.readFloatLE(0)
+      }
+     
+    }else if(characteristic.props.format == 'uint32'){
+      if(val.length == 2){
+        let v1 = val[0]&0xFF;
+        let v2 = (val[0]>>8)&0xFF;
+        let v3 = val[1]&0xFF;
+        let v4 = (val[1]>>8)&0xFF;
+        let buffer = Buffer.from([v1,v2,v3,v4]);
+        val = buffer.readUInt32LE(0)
+      }
+     
+    }else{
+      // 其它类型
     }
+
     if ('mask' in map) {
       val = val & map.mask;
     }
     if ('map' in map && (val.toString() in map.map)) {
       val = map.map[val.toString()];
     }
-    if (characteristic.props.format == 'bool') {
-      val = val ? true : false;
-    }
+
+    
+
     if (val != characteristic.value) {
       Log(this.name, characteristic.displayName, characteristic.value, "=>", val);
       characteristic.updateValue(val);
