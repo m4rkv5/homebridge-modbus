@@ -347,33 +347,6 @@ class ModbusAccessory {
       return;
     }
 
-
-    if (characteristic.props.format == 'bool') {
-      val = val ? true : false;
-    }else if(characteristic.props.format == 'float'){
-      if(val.length == 2){
-        let v1 = val[0]&0xFF;
-        let v2 = (val[0]>>8)&0xFF;
-        let v3 = val[1]&0xFF;
-        let v4 = (val[1]>>8)&0xFF;
-        let buffer = Buffer.from([v1,v2,v3,v4]);
-        val = buffer.readFloatLE(0)
-      }
-     
-    }else if(characteristic.props.format == 'uint32'){
-      if(val.length == 2){
-        let v1 = val[0]&0xFF;
-        let v2 = (val[0]>>8)&0xFF;
-        let v3 = val[1]&0xFF;
-        let v4 = (val[1]>>8)&0xFF;
-        let buffer = Buffer.from([v1,v2,v3,v4]);
-        val = buffer.readUInt32LE(0)
-      }
-     
-    }else{
-      // 其它类型
-    }
-
     if ('scale' in map) {
       val = val / map.scale;
     }
@@ -383,6 +356,9 @@ class ModbusAccessory {
     }
     if ('map' in map && (val.toString() in map.map)) {
       val = map.map[val.toString()];
+    }
+    if (characteristic.props.format == 'bool') {
+      val = val ? true : false;
     }
 
     
