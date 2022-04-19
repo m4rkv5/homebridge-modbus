@@ -150,7 +150,7 @@ class ModbusPlatform {
     }
 
     else if (this.command.cmd == 'r') {
-      this.modbus[{'c':'readCoils', 'r':'readHoldingRegisters', 'i':'readInputRegisters'}[this.command.type]](this.command.add, this.command.count).then((resp) => {
+      this.modbus[{'c':'readCoils', 'r':'readHoldingRegisters', 'i':'readInputRegisters'}[this.command.type]](this.command.add-1, this.command.count).then((resp) => {
         if(this.modbus_mode==0){
           this.status[this.command.type] = resp.response._body.valuesAsArray;
         }else{
