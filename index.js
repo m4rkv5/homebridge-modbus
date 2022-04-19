@@ -27,7 +27,7 @@ class ModbusPlatform {
     this.modbus = new Modbus.client.TCP(this.socket, config.unit || 1);
     this.commands = [];
 
-    // modbus 模式 0:批量采集模式 1：单个采集模式 
+    // modbus mode
     if (!('modbus_mode' in config)) {
       this.modbus_mode = 0;
     } else {
@@ -143,7 +143,7 @@ class ModbusPlatform {
     this.commandTime = Date.now();
 
     if (this.command.cmd == 'w') {
-      this.modbus[{'c':'WriteSingleCoil', 'r':'writeSingleRegister'}[this.command.type]](this.command.add-1, Math.round(this.command.val));
+      this.modbus[{'c':'writeSingleCoil', 'r':'writeSingleRegister'}[this.command.type]](this.command.add-1, Math.round(this.command.val));
       this.command = null;
       if (this.commands.length)
         this.socket.emit('modbus');
